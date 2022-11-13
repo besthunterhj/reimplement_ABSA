@@ -1,8 +1,9 @@
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Callable
 
-import torch.nn as nn
-from transformers import RobertaForSequenceClassification, RobertaTokenizer
+import torch
 from torch.utils.data import Dataset
+from torchtext.vocab import Vocab
+from transformers import RobertaTokenizer
 
 
 class ABSADataset(Dataset):
@@ -55,31 +56,53 @@ class ABSADataset(Dataset):
         return context_aspect_dicts, polarities
 
 
-def make_inputs_for_roberta(contexts_and_aspects: List[Dict]) -> List[str]:
+def make_inputs_for_roberta(contexts_and_aspect: Dict) -> str:
     """
     Making the input data for roberta, each item should be like "context + </s> aspect"
-    :param contexts_and_aspects: the dictionary contains contexts and aspects
+    :param contexts_and_aspect: the dictionary contains contexts and aspects
     :return: the input data which is formatted by the corresponding format
     """
 
-    inputs = []
-    for i in range(len(contexts_and_aspects)):
-        item = contexts_and_aspects[i]["context"] + " </s> " + contexts_and_aspects[i]["aspect"]
-        inputs.append(item)
+    context = contexts_and_aspect["context"] + " </s> " + contexts_and_aspect["aspect"]
 
-    return inputs
+    return context
 
 
-if __name__ == '__main__':
+def create_label_mapping(dataset: ABSADataset) -> Dict[int, str]:
 
-    # test for ABSADataset
-    absa_dataset = ABSADataset(path="dataset/Laptops_Train.xml.seg")
-    input_data = make_inputs_for_roberta(contexts_and_aspects=absa_dataset[:][0])
+    label_types = list(set(dataset.polarities))
+    textual_labels = ["negative", "neutral", "positive"]
 
-    tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-    model = RobertaForSequenceClassification.from_pretrained('roberta-base', num_labels=3)
+    # construct the dictionary for storing the mapping for labels(integers) to textual labels
+    integer2text = {}
+    for i in range(len(label_types)):
+        integer2text[i] = textual_labels[i]
 
-    test_tokenizer = tokenizer(input_data, padding=True)["input_ids"]
+    return integer2text
 
-    print(test_tokenizer[:5])
 
+def collect_fc_pretrained(samples: List[Tuple[str, int]], tokenizer: RobertaTokenizer) -> dict:
+
+    context_aspect_dicts, labels = zip(*samples)
+
+    contexts = torch.tensor(
+        list(
+            tokenizer(
+                list(
+                    map(
+                        lambda current_context_aspect_dict: make_inputs_for_roberta(current_context_aspect_dict),
+                        context_aspect_dicts
+                    )
+                ), padding=True, truncation=True
+            )["input_ids"]
+        )
+    )
+
+    labels = torch.tensor(
+        list(labels)
+    )
+
+    return {
+        "contexts": contexts,
+        "labels": labels
+    }
