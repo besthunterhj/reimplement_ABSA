@@ -12,7 +12,9 @@ from transformers import RobertaTokenizer, RobertaForSequenceClassification
 from utils import ABSADataset, collect_fc_pretrained, create_label_mapping
 from sklearn.metrics import f1_score, classification_report, accuracy_score
 
-DEVICE = "cpu"
+DEVICE = torch.device(
+    "cuda" if torch.cuda.is_available() else "cpu"
+)
 
 
 def evaluate_acc_f1(model, eval_data_loader):
